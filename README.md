@@ -1,2 +1,105 @@
 # PixeMLN
-Offline habit tracker with heatmaps, multi-graph support and a clean PySide6 UI
+
+A local-first Pixela client — track anything, visualize everything, no API drama.
+
+## Why PixeMLN?
+
+[Pixela](https://pixe.la/) is great, but dealing with API rate limits, random 503s, `isRejected` responses, and paying just for reliable uptime gets old fast. PixeMLN skips all that. Your data lives on your machine, your graphs render instantly, and nothing ever fails because a server hiccuped.
+
+## Features
+
+- **Local storage** — all data lives in the `Data` folder as JSON. No accounts, no cloud, no rate limits.
+- **Multi-user & multi-graph** — create as many users and graphs as you want. Switch between them seamlessly.
+- **Heatmaps & histograms** — visualize your pixel history right on the home screen. Toggle between display types in settings.
+- **Int & float support** — log whole numbers or decimals depending on what you're tracking.
+- **Custom themes** — pick an accent color with a circular HSV slider. The UI updates live.
+- **Graph color schemes** — 6 built-in gradient presets (green, rose, sky, peach, lavender, arctic) for your heatmaps and bar charts.
+- **Conflict resolution** — trying to log a pixel on a date that already has one? You'll get a prompt to replace or combine, not a silent overwrite.
+- **Smooth animations** — hover scale, animated modals, spinner/tick feedback, arrow button effects. It's not just functional, it looks good too.
+
+## Quick Start
+
+**Prerequisites:**
+- Python 3.10+ (3.11 recommended)
+- Windows (uses `ctypes.windll` for taskbar icon binding)
+
+**Install dependencies:**
+
+```bash
+pip install PySide6 matplotlib
+```
+
+**Run:**
+
+```bash
+python main.py
+```
+
+## Typical Workflow
+
+1. On first launch, go to **Account** and create a user.
+2. Go to **Graphs** and create a graph — give it a name, pick int or float, choose a color scheme.
+3. Go to **Add Pixel** and log your first entry. Pick a date, enter a value, done.
+4. Check the **Home** screen to see your heatmap update.
+5. Tweak colors and display settings from **Settings**.
+
+## Project Structure
+
+```
+PixeMLN/
+├── main.py                        # Entry point
+├── Data/                          # All local data (auto-created)
+│   ├── pixels.json                # Pixel entries per user per graph
+│   ├── creds.json                 # Usernames and tokens
+│   ├── themes.json                # Accent/hover/text colors
+│   └── current_data.json          # Active user, graph, display type
+├── functions/
+│   ├── pixelaAPI.py               # Pixela HTTP helpers (planned: import from Pixela)
+│   └── create_graph_images.py     # Heatmap and histogram rendering (matplotlib)
+├── helpers/
+│   ├── json_manager.py            # All data read/write logic
+│   ├── dateUtils.py               # Date parsing and format conversion
+│   ├── colorUtils.py              # HSV/hex math, contrast helpers
+│   └── CustomWidgets.py           # Reusable Qt widgets
+├── ui/
+│   ├── UI.py                      # Main window, screen stack, font loading
+│   ├── homepage.py                # Home screen with heatmap and overview
+│   ├── add_pixels.py              # Pixel entry form with conflict handling
+│   ├── graphs.py                  # Graph management (create, rename, delete, recolor)
+│   ├── account.py                 # Account management
+│   ├── settings.py                # Theme picker, display type, graph selector
+│   ├── sidebar.py                 # Navigation sidebar
+│   └── helpers.py                 # UI-layer utilities
+└── assets/                        # Icons, fonts, generated graph images
+```
+
+## Data Format
+
+Pixel data in `pixels.json` looks like this:
+
+```json
+[
+    {
+        "username": [
+            {
+                "graph_id": "python",
+                "graph_type": "int",
+                "graph_color": "green",
+                "pixels": [{"01012025": 3}, {"02012025": 5}]
+            }
+        ]
+    }
+]
+```
+
+Dates are stored as `DDMMYYYY`. The app handles conversion internally.
+
+## Planned
+
+- Import existing data from Pixela via `functions/pixelaAPI.py` (scaffolded, not yet wired up)
+
+## License
+
+MIT. Do whatever you want with it.
+
+Made with ❤️, Debugged with 😭 by [WTRMLN](https://github.com/WTRMLNv1)
