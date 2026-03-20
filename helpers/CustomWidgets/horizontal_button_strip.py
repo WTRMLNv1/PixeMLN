@@ -48,6 +48,8 @@ class HorizontalButtonStrip(QWidget):
         bar_height=6,
         bar_arrow_area=12,
         bar_min_handle=22,
+        arrow_width_factor=1.3,
+        arrow_corner_radius=1.5,
     ):
         super().__init__(parent)
 
@@ -63,6 +65,8 @@ class HorizontalButtonStrip(QWidget):
         self._bar_height      = int(bar_height)
         self._bar_arrow_area  = int(bar_arrow_area)
         self._bar_min_handle  = int(bar_min_handle)
+        self._arrow_width_factor   = float(arrow_width_factor)
+        self._arrow_corner_radius  = float(arrow_corner_radius)
 
         self._accent = "#5BF69F"
         self._hover  = "#48C47F"
@@ -105,6 +109,8 @@ class HorizontalButtonStrip(QWidget):
             bar_height=self._bar_height,
             margin=2,
             min_handle_width=self._bar_min_handle,
+            arrow_width_factor=self._arrow_width_factor,
+            arrow_corner_radius=self._arrow_corner_radius,
         )
         self._hbar.setStyleSheet("QScrollBar { background: transparent; border: none; }")
         self._hbar.valueChanged.connect(self._on_scroll)
@@ -247,6 +253,27 @@ class HorizontalButtonStrip(QWidget):
         if text_color:
             self._text = text_color
         self._apply_button_styles()
+
+
+    # ─────────────────────────── scroll ───────────────────────────
+
+    def wheelEvent(self, event):
+        """Forward both horizontal and vertical wheel/touchpad swipes to the scrollbar."""
+        if not self._hbar.isVisible():
+            event.ignore()
+            return
+        # Prefer horizontal delta; fall back to vertical (so a plain scroll wheel
+        # on a mouse also scrolls the strip sideways).
+        delta_x = event.angleDelta().x()
+        delta_y = event.angleDelta().y()
+        delta = delta_x if abs(delta_x) >= abs(delta_y) else -delta_y
+        # angleDelta is in eighths of a degree; 120 eighths = one notch = 15°
+        step = max(1, self._hbar.singleStep())
+        scroll_amount = int(delta / 120 * step * 3)
+        new_val = max(self._hbar.minimum(),
+                      min(self._hbar.maximum(), self._hbar.value() - scroll_amount))
+        self._hbar.setValue(new_val)
+        event.accept()
 
     # ─────────────────────────── internals ───────────────────────────
 

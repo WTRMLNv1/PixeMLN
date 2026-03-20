@@ -21,6 +21,8 @@ from helpers.json_manager import (
     delete_graph,
     get_graph_color,
     set_graph_color,
+    get_pixel_dict,
+    _num_pixels,
 )
 import os
 
@@ -94,7 +96,6 @@ class HeatmapBubbleSwatch(QWidget):
         painter.drawRoundedRect(outer, 8, 8)
 
         # ── layout: 6px left pad, 4px gaps between all objects, 6px right ──
-        # Objects: sq0 | 4px | sq1 | 4px | sq2 | 4px | divider | 4px | sq3 | 6px right
         pad_l = 6
         gap   = 4
         y = (h - sq) // 2   # vertically centred
@@ -173,12 +174,9 @@ class ColorPickerPopup(QFrame):
         self.hide()
 
     def show_near(self, anchor_widget, current_color):
-        # position popup above the anchor widget
-        anchor_pos = anchor_widget.mapTo(self.parent(), anchor_widget.pos() * 0)
         anchor_global = anchor_widget.mapToParent(anchor_widget.rect().topLeft())
         x = anchor_global.x()
         y = anchor_global.y() - self.height() - 6
-        # clamp to parent bounds
         parent_w = self.parent().width()
         if x + self.width() > parent_w:
             x = parent_w - self.width() - 4
@@ -245,16 +243,15 @@ class Graphs(QWidget):
         self.current_user = None
         self.graphs = []
         self.selected_graph = None
-        self._create_color = "green"   # chosen color for the next graph creation
-        self._edit_color = None         # color chosen in edit/rename modal
-        # sequence counter used by background image rebuilds
+        self._create_color = "green"
+        self._edit_color = None
         self._load_seq = 0
 
         # spinner / tick refs
         self._spinner_anim = None
         self._tick_anim = None
 
-        # arrow-button animation data (from account.py pattern)
+        # arrow-button animation data
         self._arrow_source_pix = None
         self._action_button_content = {}
         self._arrow_hover_shift_px = 4
@@ -262,6 +259,10 @@ class Graphs(QWidget):
         # morph animation for edit graph button
         self._edit_graph_morph = None
         self._edit_graph_morph_group = None
+
+        # morph animation for delete graph button
+        self._delete_graph_morph = None
+        self._delete_graph_morph_group = None
 
     # ─────────────────────────── setup ───────────────────────────
 
@@ -296,76 +297,115 @@ class Graphs(QWidget):
         divider.setFixedSize(300, 1)
         divider.move((640 - 300) // 2, 70)
 
-        # ── current user box (standalone, like account.py) ──
-        self.current_user_box = QFrame(self.main_frame)
-        self.current_user_box.setGeometry(191, 98, 260, 86)
-        self.current_user_box.setStyleSheet("""
-            QFrame {
-                background-color: #2e3a34;
-                border: 1px solid #3b5247;
-                border-radius: 20px;
-            }
-        """)
-
-        current_user_title = QLabel("current user", self.current_user_box)
-        ctf = QFont()
-        ctf.setPointSize(15)
-        current_user_title.setFont(ctf)
-        current_user_title.setGeometry(0, 8, 260, 26)
-        current_user_title.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
-        current_user_title.setStyleSheet(
-            "color: #FFFFFF; background: transparent; border: none;"
+        # ──────────────────────────────────────────────────────────
+        # CREATE GRAPH FRAME  (551×147 at 48, 97)
+        # ──────────────────────────────────────────────────────────
+        self.create_frame = QFrame(self.main_frame)
+        self.create_frame.setGeometry(48, 97, 551, 147)
+        self.create_frame.setStyleSheet(
+            "QFrame { background-color: #353535; border: 1px solid #5b5b5b; border-radius: 20px; }"
         )
 
-        self.current_user_value = QLabel("", self.current_user_box)
-        cvf = QFont()
-        cvf.setPointSize(15)
-        cvf.setBold(True)
-        self.current_user_value.setFont(cvf)
-        self.current_user_value.setGeometry(0, 33, 260, 44)
-        self.current_user_value.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
-        self.current_user_value.setStyleSheet(
-            "color: #FFFFFF; background: transparent; border: none;"
-        )
-
-        # ── form panel (matches account.py geometry: y=220, h=286) ──
-        self.form_frame = QFrame(self.main_frame)
-        self.form_frame.setGeometry(45, 220, 551, 286)
-        self.form_frame.setStyleSheet(
-            "background-color: #353535; border-radius: 20px;"
-            " border: 1px solid rgba(96,96,96,0.9);"
-        )
-
-        label_font = QFont()
-        label_font.setPointSize(15)
-        label_font.setBold(True)
-
-        small_font = QFont()
-        small_font.setPointSize(12)
+        label_font_20 = QFont()
+        label_font_20.setPointSize(20)
+        label_font_20.setBold(True)
 
         ef = QFont()
         ef.setPointSize(10)
 
-        # ── "Your graphs:" label ──
-        graphs_label = QLabel("Your graphs:", self.form_frame)
-        graphs_label.setGeometry(16, 10, 280, 28)
-        graphs_label.setFont(label_font)
-        graphs_label.setStyleSheet(
-            "color: #FFFFFF; background: transparent; border: none;"
+        small_font = QFont()
+        small_font.setPointSize(12)
+
+        # "Create a graph:" label  at 17, 16
+        create_label = QLabel("Create a graph:", self.create_frame)
+        create_label.setGeometry(17, 16, 300, 30)
+        create_label.setFont(label_font_20)
+        create_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
+
+        # Graph name entry  328×20 at 17, 47
+        self.create_name_input = QLineEdit(self.create_frame)
+        self.create_name_input.setGeometry(17, 52, 328, 24)
+        self.create_name_input.setPlaceholderText("Graph name")
+        self._style_input(self.create_name_input)
+        self.create_name_input.textChanged.connect(self._on_create_input_changed)
+        self.create_name_input.returnPressed.connect(self._submit_create)
+
+        # Create button (accent pill, right-aligned in the entry row)
+        self.create_btn = HoverScaleButton("Create", self.create_frame, border_radius=12)
+        self.create_btn.setGeometry(360, 49, 77, 28)
+        self.create_btn.setCursor(Qt.PointingHandCursor)
+        self.create_btn.setFont(small_font)
+        self.accent_buttons.append(self.create_btn)
+        self.create_btn.clicked.connect(self._submit_create)
+
+        # Type row  at 17, 84
+        type_label = QLabel("Type:", self.create_frame)
+        type_label.setGeometry(17, 87, 40, 18)
+        type_label.setFont(ef)
+        type_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
+
+        theme = get_theme()
+        self.type_toggle = IntFltToggle(
+            parent=self.create_frame,
+            on_change=self._on_type_changed,
+            accent_color=theme.get("accent_color", "#5BF69F"),
+            hover_color=theme.get("hover_color", "#48C47F"),
+            text_color=theme.get("text_color", "#FFFFFF"),
+            initial_value="int",
+        )
+        self.type_toggle.move(63, 86)
+
+        # Color row  at 17, 108
+        color_label_create = QLabel("Color:", self.create_frame)
+        color_label_create.setGeometry(17, 113, 44, 18)
+        color_label_create.setFont(ef)
+        color_label_create.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
+
+        self.create_color_btn = HeatmapBubbleSwatch(self._create_color, self.create_frame)
+        self.create_color_btn.move(63, 113)
+        self.create_color_btn.clicked.connect(self._toggle_create_color_popup)
+        self._create_color_popup = ColorPickerPopup(self.main_frame, self._on_create_color_picked)
+
+        # create error
+        self.create_error = QLabel("", self.create_frame)
+        self.create_error.setGeometry(17, 132, 519, 14)
+        self.create_error.setFont(ef)
+        self.create_error.setStyleSheet("color: #ff7e7e; background: transparent; border: none;")
+        self.create_error.hide()
+
+        # ──────────────────────────────────────────────────────────
+        # EDIT GRAPH FRAME  — placed just below create frame
+        # create_frame bottom = 97 + 147 = 244; gap 12 → y = 256
+        # ──────────────────────────────────────────────────────────
+        EDIT_FRAME_Y = 256
+        # Height: 12 (top pad) + 30 (label row) + 60 (strip) + 62 (info) + 30 (edit btn) + 30 (delete btn) + 20 (pad) = ~244
+        EDIT_FRAME_H = 550 - EDIT_FRAME_Y - 10   # stretch to near bottom with 10px margin
+        self.edit_frame = QFrame(self.main_frame)
+        self.edit_frame.setGeometry(48, EDIT_FRAME_Y, 551, EDIT_FRAME_H)
+        self.edit_frame.setStyleSheet(
+            "QFrame { background-color: #353535; border: 1px solid #5b5b5b; border-radius: 20px; }"
         )
 
-        # ── selected graph subtitle ──
-        self.selected_graph_label = QLabel("none", self.form_frame)
-        self.selected_graph_label.setGeometry(170, 15, 365, 20)
-        self.selected_graph_label.setFont(small_font)
-        self.selected_graph_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.selected_graph_label.setStyleSheet(
-            "color: #7f7f7f; background: transparent; border: none;"
-        )
+        # "Edit a graph" label at 17, 12
+        edit_label = QLabel("Edit a graph", self.edit_frame)
+        edit_label.setGeometry(17, 12, 200, 28)
+        edit_label.setFont(label_font_20)
+        edit_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
 
-        # ── graph scroll strip (inside a container frame, Figma: Frame 2610471) ──
+        # "none selected" subtitle — to the right of "Edit a graph" label (which ends ~217px)
+        mono_family = self.ui.fonts.get("mono") or "Roboto Mono"
+        self.selected_graph_label = QLabel("none selected", self.edit_frame)
+        self.selected_graph_label.setGeometry(222, 16, 310, 20)
+        sel_font = QFont(mono_family)
+        sel_font.setPointSize(14)
+        sel_font.setBold(True)
+        self.selected_graph_label.setFont(sel_font)
+        self.selected_graph_label.setStyleSheet("color: #7f7f7f; background: transparent; border: none;")
+
+        # ── graph button strip at 17, 43 — 451×60 ──
+        accent = get_theme().get("accent_color", "#5BF69F")
         self.graph_strip = HorizontalButtonStrip(
-            parent=self.form_frame,
+            parent=self.edit_frame,
             border_radius=8,
             button_height=30,
             button_radius=14,
@@ -377,122 +417,81 @@ class Graphs(QWidget):
             bar_arrow_area=12,
             bar_min_handle=22,
         )
-        self.graph_strip.setGeometry(16, 38, 451, 52)
+        self.graph_strip.setGeometry(17, 43, 451, 60)
 
         # spinner + tick next to strip
-        accent = get_theme().get("accent_color", "#5BF69F")
-        self.graph_spinner = SpinnerWidget(size=14, thickness=2, color=accent, parent=self.form_frame)
-        self.graph_tick = TickWidget(size=14, thickness=2, color=accent, parent=self.form_frame)
+        self.graph_spinner = SpinnerWidget(size=14, thickness=2, color=accent, parent=self.edit_frame)
+        self.graph_tick = TickWidget(size=14, thickness=2, color=accent, parent=self.edit_frame)
         self._position_status_widgets()
         self._set_status("idle")
 
-        # ── separator ──
-        sep1 = QFrame(self.form_frame)
-        sep1.setStyleSheet("background-color: #505050; border: none;")
-        sep1.setFixedSize(519, 1)
-        sep1.move(16, 112)
-
-        # ── "Create a graph:" label ──
-        create_label = QLabel("Create a graph:", self.form_frame)
-        create_label.setGeometry(16, 121, 220, 26)
-        create_label.setFont(label_font)
-        create_label.setStyleSheet(
-            "color: #FFFFFF; background: transparent; border: none;"
+        # ── Info graph panel at 33, 113 — 201×62 ──
+        self.info_frame = QFrame(self.edit_frame)
+        self.info_frame.setGeometry(33, 113, 201, 62)
+        self.info_frame.setStyleSheet(
+            "QFrame { background-color: #2b2b2b; border: 1px solid #505050; border-radius: 14px; }"
         )
 
-        # ── graph name input ──
-        self.create_name_input = QLineEdit(self.form_frame)
-        self.create_name_input.setGeometry(16, 152, 328, 22)
-        self.create_name_input.setPlaceholderText("Graph name")
-        self._style_input(self.create_name_input)
-        self.create_name_input.textChanged.connect(self._on_create_input_changed)
-        self.create_name_input.returnPressed.connect(self._submit_create)
+        # Info title  — 3px from top, centered horizontally
+        self.info_title = QLabel("Info", self.info_frame)
+        info_title_font = QFont()
+        info_title_font.setPointSize(11)
+        info_title_font.setBold(True)
+        self.info_title.setFont(info_title_font)
+        self.info_title.setGeometry(0, 3, 201, 20)
+        self.info_title.setAlignment(Qt.AlignCenter)
+        self.info_title.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
 
-        # ── Type label + int/flt toggle ──
-        type_label = QLabel("Type:", self.form_frame)
-        type_label.setGeometry(16, 179, 40, 18)
-        type_label.setFont(ef)
-        type_label.setStyleSheet(
-            "color: #FFFFFF; background: transparent; border: none;"
-        )
+        # Info body text
+        self.info_body = QLabel("Choose a graph to see info", self.info_frame)
+        info_body_font = QFont(mono_family)
+        info_body_font.setPointSize(9)
+        self.info_body.setFont(info_body_font)
+        self.info_body.setGeometry(4, 24, 193, 34)
+        self.info_body.setAlignment(Qt.AlignCenter)
+        self.info_body.setWordWrap(True)
+        self.info_body.setStyleSheet("color: #8a8a8a; background: transparent; border: none;")
 
-        theme = get_theme()
-        self.type_toggle = IntFltToggle(
-            parent=self.form_frame,
-            on_change=self._on_type_changed,
-            accent_color=theme.get("accent_color", "#5BF69F"),
-            hover_color=theme.get("hover_color", "#48C47F"),
-            text_color=theme.get("text_color", "#FFFFFF"),
-            initial_value="int",
-        )
-        self.type_toggle.move(62, 178)
-
-        # ── Color label + swatch button (create) ──
-        color_label_create = QLabel("Color:", self.form_frame)
-        color_label_create.setGeometry(200, 179, 44, 18)
-        color_label_create.setFont(ef)
-        color_label_create.setStyleSheet(
-            "color: #FFFFFF; background: transparent; border: none;"
-        )
-        self.create_color_btn = HeatmapBubbleSwatch(self._create_color, self.form_frame)
-        self.create_color_btn.move(248, 179)
-        self.create_color_btn.clicked.connect(self._toggle_create_color_popup)
-        # popup (created lazily and parented to main_frame so it floats above form)
-        self._create_color_popup = ColorPickerPopup(self.main_frame, self._on_create_color_picked)
-
-        # Create button
-        self.create_btn = HoverScaleButton("Create", self.form_frame, border_radius=12)
-        self.create_btn.setGeometry(402, 149, 77, 28)
-        self.create_btn.setCursor(Qt.PointingHandCursor)
-        self.create_btn.setFont(small_font)
-        self.accent_buttons.append(self.create_btn)
-        self.create_btn.clicked.connect(self._submit_create)
-
-        # create error
-        self.create_error = QLabel("", self.form_frame)
-        self.create_error.setGeometry(16, 200, 519, 16)
-        self.create_error.setFont(ef)
-        self.create_error.setStyleSheet(
-            "color: #ff7e7e; background: transparent; border: none;"
-        )
-        self.create_error.hide()
-
-        # ── separator ──
-        sep2 = QFrame(self.form_frame)
-        sep2.setStyleSheet("background-color: #505050; border: none;")
-        sep2.setFixedSize(519, 1)
-        sep2.move(16, 220)
-
-        # ── "Edit a graph:" label ──
-        edit_label = QLabel("Edit a graph:", self.form_frame)
-        edit_label.setGeometry(16, 229, 220, 26)
-        edit_label.setFont(label_font)
-        edit_label.setStyleSheet(
-            "color: #FFFFFF; background: transparent; border: none;"
-        )
-
-        # ── edit graph button (accent pill, with animated arrow) ──
-        self.edit_graph_btn = QPushButton("edit graph", self.form_frame)
-        self.edit_graph_btn.setGeometry(16, 257, 110, 22)
+        # ── Edit graph arrow button at 33, 185 ──
+        self.edit_graph_btn = QPushButton("edit graph", self.edit_frame)
+        self.edit_graph_btn.setGeometry(33, 185, 110, 22)
         self.edit_graph_btn.setCursor(Qt.PointingHandCursor)
         self.accent_buttons.append(self.edit_graph_btn)
         self._prepare_arrow_source()
         self._setup_action_button_arrow(self.edit_graph_btn)
 
-        # edit error
-        self.edit_error = QLabel("", self.form_frame)
-        self.edit_error.setGeometry(135, 258, 400, 16)
+        # edit error (next to edit button)
+        self.edit_error = QLabel("", self.edit_frame)
+        self.edit_error.setGeometry(152, 186, 380, 16)
         self.edit_error.setFont(ef)
-        self.edit_error.setStyleSheet(
-            "color: #ff7e7e; background: transparent; border: none;"
-        )
+        self.edit_error.setStyleSheet("color: #ff7e7e; background: transparent; border: none;")
         self.edit_error.hide()
+
+        # ── Delete graph button at 33, ~215 ──
+        DELETE_BTN_Y = 185 + 22 + 10
+        self.delete_graph_btn = HoverScaleButton("Delete graph", self.edit_frame, border_radius=11)
+        self.delete_graph_btn.setGeometry(33, DELETE_BTN_Y, 110, 22)
+        self.delete_graph_btn.setCursor(Qt.PointingHandCursor)
+        self.delete_graph_btn.setFont(QFont())  # default font, styled below
+        self.delete_graph_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #E94646;
+                border-radius: 11px;
+                color: #FFFFFF;
+                font-size: 13px;
+                border: none;
+            }
+            QPushButton:hover { background-color: #ff5555; }
+            QPushButton:pressed { background-color: #c93333; }
+        """)
+        self.delete_graph_btn.set_text_color("#FFFFFF")  # explicit override so paintEvent draws the text
+        self.delete_graph_btn.clicked.connect(self._on_delete_graph_clicked)
 
         # ── modals ──
         self._build_rename_modal()
         self._build_delete_modal()
 
-        for w in (self, self.main_frame, self.form_frame, self.rename_overlay):
+        for w in (self, self.main_frame, self.edit_frame, self.rename_overlay):
             try:
                 w.installEventFilter(self)
             except Exception:
@@ -549,10 +548,6 @@ class Graphs(QWidget):
         except Exception:
             self.graphs = []
 
-        if not getattr(self, "_setup_done", False):
-            return
-        self.current_user_value.setText(self.current_user or "unknown")
-
     # ─────────────────────────── graph buttons ───────────────────────────
 
     def _build_graph_buttons(self):
@@ -575,6 +570,7 @@ class Graphs(QWidget):
         self.selected_graph = graph_name
         self._refresh_graph_button_styles()
         self._refresh_selected_label()
+        self._refresh_info_panel()
         self._set_edit_error("")
 
     def _refresh_graph_button_styles(self):
@@ -591,7 +587,7 @@ class Graphs(QWidget):
 
     def _refresh_selected_label(self):
         if not self.selected_graph:
-            self.selected_graph_label.setText("none")
+            self.selected_graph_label.setText("none selected")
             self.selected_graph_label.setStyleSheet(
                 "color: #7f7f7f; background: transparent; border: none;"
             )
@@ -600,6 +596,47 @@ class Graphs(QWidget):
             self.selected_graph_label.setStyleSheet(
                 "color: #9b9b9b; background: transparent; border: none;"
             )
+
+    # ─────────────────────────── info panel ───────────────────────────
+
+    def _refresh_info_panel(self):
+        if not getattr(self, "_setup_done", False):
+            return
+        if not self.selected_graph or not self.current_user:
+            self.info_title.setText("Info")
+            self.info_body.setText("Choose a graph to see info")
+            self.info_body.setStyleSheet("color: #8a8a8a; background: transparent; border: none;")
+            return
+
+        # Graph is selected — show stats
+        try:
+            pixel_dict = get_pixel_dict(self.current_user, self.selected_graph)
+            num_pixels = _num_pixels(self.current_user, self.selected_graph)
+            color_key = get_graph_color(self.current_user, self.selected_graph)
+
+            if pixel_dict:
+                values = []
+                for v in pixel_dict.values():
+                    try:
+                        values.append(float(v))
+                    except (TypeError, ValueError):
+                        continue
+                avg = round(sum(values) / len(values), 2) if values else 0
+            else:
+                avg = 0
+
+            scheme = GRAPH_COLOR_SCHEMES.get(color_key, GRAPH_COLOR_SCHEMES["green"])
+            accent_hex = scheme["bar"]
+
+            self.info_title.setText(self.selected_graph)
+            self.info_body.setText(f"Pixels: {num_pixels}   Avg: {avg}")
+            self.info_body.setStyleSheet(
+                f"color: {accent_hex}; background: transparent; border: none;"
+            )
+        except Exception:
+            self.info_title.setText("Info")
+            self.info_body.setText("Could not load info")
+            self.info_body.setStyleSheet("color: #8a8a8a; background: transparent; border: none;")
 
     # ─────────────────────────── type toggle ───────────────────────────
 
@@ -711,7 +748,6 @@ class Graphs(QWidget):
         self.edit_color_btn.move(70, 134)
         self.edit_color_btn.clicked.connect(self._toggle_edit_color_popup)
 
-        # popup parented to rename_overlay so it floats above the modal
         self._edit_color_popup = ColorPickerPopup(self.rename_overlay, self._on_edit_color_picked)
 
         cancel_btn = QPushButton("Cancel", modal)
@@ -744,7 +780,6 @@ class Graphs(QWidget):
         self.rename_input.selectAll()
         self.rename_input.setPlaceholderText("Graph name")
         self.rename_error.hide()
-        # load current color for this graph
         try:
             self._edit_color = get_graph_color(self.current_user, self.selected_graph)
         except Exception:
@@ -761,7 +796,6 @@ class Graphs(QWidget):
             self.rename_error.show()
             return
         if new_name == self.selected_graph:
-            # name unchanged — but color may have changed; save color and rebuild image
             old_color = get_graph_color(self.current_user, self.selected_graph)
             if self._edit_color and self._edit_color != old_color:
                 try:
@@ -793,7 +827,6 @@ class Graphs(QWidget):
             self.rename_error.show()
             return
 
-        # save color (use new name since rename already happened)
         if self._edit_color:
             try:
                 set_graph_color(self.current_user, new_name, self._edit_color)
@@ -807,7 +840,6 @@ class Graphs(QWidget):
     # ─────────────────────────── image rebuild helper ───────────────────────────
 
     def _rebuild_display_image_for(self, graph_name):
-        """Regenerate the cached heatmap/histogram for graph_name, then refresh the homepage."""
         import threading
         from functions.create_graph_images import create_heatmap, create_histogram
         from helpers.json_manager import get_current_graph
@@ -835,7 +867,6 @@ class Graphs(QWidget):
         threading.Thread(target=_worker, daemon=True).start()
 
     def _maybe_finish_load(self, seq_id):
-        """Mark load finished only if seq_id matches latest request."""
         if not hasattr(self, "_load_seq") or seq_id != self._load_seq:
             return
         try:
@@ -911,15 +942,75 @@ class Graphs(QWidget):
         confirm_btn.setCursor(Qt.PointingHandCursor)
         confirm_btn.setStyleSheet("""
             QPushButton {
-                background-color: #8b2020;
+                background-color: #E94646;
                 color: #FFFFFF;
                 border-radius: 10px;
                 font-size: 13px;
                 border: none;
             }
-            QPushButton:hover { background-color: #a02828; }
+            QPushButton:hover { background-color: #ff5555; }
         """)
         confirm_btn.clicked.connect(self._confirm_delete)
+
+    # ─────────────────────────── delete button ───────────────────────────
+
+    def _on_delete_graph_clicked(self):
+        if not self.selected_graph:
+            self._set_edit_error("Select a graph first")
+            return
+        self._set_edit_error("")
+
+        btn = self.delete_graph_btn
+        start_top_left = btn.mapTo(self.main_frame, QPoint(0, 0))
+        start_rect = QRect(start_top_left, btn.size())
+        end_rect = QRect(self.delete_modal.mapTo(self.main_frame, QPoint(0, 0)), self.delete_modal.size())
+
+        start_color = QColor("#E94646")
+        end_color = QColor("#2f2f2f")
+
+        morph = MorphWidget(self.main_frame)
+        morph.setGeometry(start_rect)
+        morph.radius = 11.0
+        morph.color = start_color
+        morph.show()
+        morph.raise_()
+        self._delete_graph_morph = morph
+
+        self.delete_overlay.hide()
+
+        group = QParallelAnimationGroup(self)
+
+        geo_anim = QPropertyAnimation(morph, b"geometry", self)
+        geo_anim.setDuration(280)
+        geo_anim.setStartValue(start_rect)
+        geo_anim.setEndValue(end_rect)
+        geo_anim.setEasingCurve(QEasingCurve.InOutCubic)
+
+        radius_anim = QPropertyAnimation(morph, b"radius", self)
+        radius_anim.setDuration(280)
+        radius_anim.setStartValue(11.0)
+        radius_anim.setEndValue(16.0)
+        radius_anim.setEasingCurve(QEasingCurve.InOutCubic)
+
+        color_anim = QPropertyAnimation(morph, b"color", self)
+        color_anim.setDuration(280)
+        color_anim.setStartValue(start_color)
+        color_anim.setEndValue(end_color)
+        color_anim.setEasingCurve(QEasingCurve.InOutCubic)
+
+        group.addAnimation(geo_anim)
+        group.addAnimation(radius_anim)
+        group.addAnimation(color_anim)
+        group.finished.connect(self._finish_open_delete_modal)
+        self._delete_graph_morph_group = group
+        group.start()
+
+    def _finish_open_delete_modal(self):
+        if hasattr(self, "_delete_graph_morph") and self._delete_graph_morph is not None:
+            self._delete_graph_morph.deleteLater()
+            self._delete_graph_morph = None
+        self._delete_graph_morph_group = None
+        self._open_delete_modal()
 
     def _open_delete_modal(self):
         if not self.selected_graph:
@@ -954,6 +1045,7 @@ class Graphs(QWidget):
         self._close_delete_modal()
         self.selected_graph = None
         self._refresh_selected_label()
+        self._refresh_info_panel()
         self._reload_graphs(select=None)
         self._set_status("done")
 
@@ -972,7 +1064,6 @@ class Graphs(QWidget):
             return
         self._set_edit_error("")
 
-        # Stop any previous morph
         if self._edit_graph_morph_group is not None and self._edit_graph_morph_group.state() == QAbstractAnimation.Running:
             self._edit_graph_morph_group.stop()
             self._edit_graph_morph_group = None
@@ -1042,7 +1133,6 @@ class Graphs(QWidget):
         if popup.isVisible():
             popup.hide()
             return
-        # position popup relative to main_frame
         btn_pos = self.create_color_btn.mapTo(self.main_frame, self.create_color_btn.rect().topLeft())
         x = btn_pos.x()
         y = btn_pos.y() - popup.height() - 6
@@ -1154,7 +1244,7 @@ class Graphs(QWidget):
         self._tick_anim.start()
         QTimer.singleShot(1600, lambda: self.graph_tick.hide())
 
-    # ─────────────────────────── arrow button (account.py pattern) ───────────────────────────
+    # ─────────────────────────── arrow button ───────────────────────────
 
     def _prepare_arrow_source(self):
         base_dir = os.path.dirname(os.path.dirname(__file__))
@@ -1327,8 +1417,8 @@ class Graphs(QWidget):
             self.selected_graph = None
         self._build_graph_buttons()
         self._refresh_selected_label()
+        self._refresh_info_panel()
 
-        # notify add_pixel screen
         try:
             ap = getattr(self.ui, "add_pixel_screen", None)
             if ap and hasattr(ap, "refresh_after_account_change"):
@@ -1336,12 +1426,10 @@ class Graphs(QWidget):
         except Exception:
             pass
 
-        # notify settings screen so its dropdown stays in sync
         try:
             ss = getattr(self.ui, "settings_screen", None)
             if ss and hasattr(ss, "_rebuild_display_dropdown_items"):
                 ss._rebuild_display_dropdown_items(self.graphs)
-                # re-sync selection in case current graph was deleted
                 try:
                     from helpers.json_manager import get_current_graph
                     current = get_current_graph() or {}
@@ -1403,6 +1491,6 @@ class Graphs(QWidget):
         if not self._setup_done:
             return
         self._load_data()
-        self.current_user_value.setText(self.current_user or "unknown")
         self.selected_graph = None
         self._reload_graphs(select=None)
+        self._refresh_info_panel()

@@ -35,10 +35,12 @@ class UI:
         self.fonts = {}
 
         def load_font(path):
-            fid = QFontDatabase.addApplicationFont(path)
+            abs_path = os.path.join(BASE_DIR, path)
+            fid = QFontDatabase.addApplicationFont(abs_path)
             if fid != -1:
                 family = QFontDatabase.applicationFontFamilies(fid)[0]
                 return family
+            print(f"Warning: Could not load font: {abs_path}")
             return None
 
         # load fonts

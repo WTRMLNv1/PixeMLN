@@ -3,6 +3,9 @@ from PySide6.QtGui import QPixmap, QFont
 from PySide6.QtCore import Qt
 from helpers.CustomWidgets import HoverScaleButton, apply_widget_shadow
 from helpers.json_manager import get_theme
+import os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class SideBar(QWidget):
@@ -30,7 +33,7 @@ class SideBar(QWidget):
         self.logo_label.setGeometry(0, 0, 170, 57)
         self.logo_label.setAlignment(Qt.AlignCenter)
         try:
-            pix = QPixmap("assets/pixemln-logo-text-side.png")
+            pix = QPixmap(os.path.join(BASE_DIR, "assets", "pixemln-logo-text-side.png"))
             if not pix.isNull():
                 self.logo_label.setPixmap(pix.scaled(200, 57, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         except Exception:

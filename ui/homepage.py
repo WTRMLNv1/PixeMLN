@@ -10,6 +10,9 @@ from helpers.json_manager import (
     get_pixel_dict,
     get_current_graph,
 )
+import os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class HoverScaleFrame(QFrame):
     def __init__(self, parent=None, scale_factor=1.05, press_scale=1.03, duration=140):
@@ -210,7 +213,7 @@ class HomePage(QWidget):
         self.logo2_label.setGeometry(0, 0, 250, 250)
         self.logo2_label.setAlignment(Qt.AlignCenter)
         try:
-            pix = QPixmap("assets/pixemln-logo-text_main.png")
+            pix = QPixmap(os.path.join(BASE_DIR, "assets", "pixemln-logo-text_main.png"))
             if not pix.isNull():
                 self.logo2_label.setPixmap(pix.scaled(225, 225, Qt.KeepAspectRatio, Qt.SmoothTransformation))
                 self.logo2_label.setStyleSheet("background-color: transparent; border: none;")
@@ -345,7 +348,7 @@ class HomePage(QWidget):
             self.heatmap_image.clear()
             return
         # Reload on every refresh so file regenerations (heatmap/histogram) are visible immediately.
-        pix = QPixmap("assets/heatmap.png")
+        pix = QPixmap(os.path.join(BASE_DIR, "assets", "heatmap.png"))
         if pix.isNull():
             self.heatmap_image.clear()
             return

@@ -5,7 +5,7 @@ import os
 import re
 from PySide6.QtWidgets import QFrame, QScrollBar, QPushButton, QLabel, QWidget, QScrollArea, QSizePolicy, QGraphicsDropShadowEffect
 from PySide6.QtGui import QPainterPath, QPainter, QColor, QPixmap, QFont, QIcon, QTransform, QPen
-from PySide6.QtCore import Qt, QRect, QRectF, QSize, QObject, Property, QPropertyAnimation, QParallelAnimationGroup, QEasingCurve, Signal, QTimer, QPoint, QEvent
+from PySide6.QtCore import Qt, QRect, QRectF, QSize, QObject, Property, QPropertyAnimation, QParallelAnimationGroup, QEasingCurve, Signal, QTimer, QPoint, QPointF, QEvent
 from datetime import date, timedelta
 from helpers.json_manager import get_theme
 
