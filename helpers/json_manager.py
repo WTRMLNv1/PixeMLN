@@ -24,6 +24,7 @@ log = get_logger(__name__)
 BASE_DIR = str(Path(__file__).resolve().parent.parent)
 
 DEFAULT_GRAPH_COLOR = "green"
+_theme_cache: dict | None = None
 
 def _resolve_current_data_paths(file_path=None):
     if file_path:
@@ -148,13 +149,18 @@ def get_graph_color(username, graph_id, file_path=os.path.join(BASE_DIR, "Data",
     return DEFAULT_GRAPH_COLOR
 
 def get_theme(file_path=os.path.join(BASE_DIR, "Data", "themes.json")):
+    global _theme_cache
+    if _theme_cache is not None:
+        return dict(_theme_cache)
     default_theme = {
         "accent_color": "#5BF69F",
         "hover_color":  "#48C47F",
         "text_color":   "#FFFFFF"
     }
     ensure_json_file(file_path, default_theme)
-    return read_json(file_path)
+    _theme_cache = read_json(file_path)
+    log.debug("Theme cache loaded from disk")
+    return dict(_theme_cache)
 
 def get_pixel_dict(username, graph_id, file_path=os.path.join(BASE_DIR, "Data", "pixels.json")):
     """Return pixel data as {'YYYYMMDD': quantity}."""
@@ -505,6 +511,7 @@ def add_pixel_entry(username, graph_id, date_str, quantity,
 
 def set_theme(accent_color="#5BF69F", hover_color="#48C47F", text_color="#FFFFFF",
               file_path=os.path.join(BASE_DIR, "Data", "themes.json")):
+    global _theme_cache
     theme = get_theme(file_path)
     if accent_color:
         theme['accent_color'] = accent_color
@@ -513,6 +520,7 @@ def set_theme(accent_color="#5BF69F", hover_color="#48C47F", text_color="#FFFFFF
     if text_color:
         theme['text_color'] = text_color
     write_json(file_path, theme)
+    _theme_cache = theme
     log.debug("Theme updated: accent=%s hover=%s text=%s", accent_color, hover_color, text_color)
 
 def add_graph(username, graph_id, graph_type, graph_color=DEFAULT_GRAPH_COLOR,

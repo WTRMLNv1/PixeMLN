@@ -1,5 +1,6 @@
 # ui/UI.py
 from pathlib import Path
+import sys
 from PySide6.QtWidgets import QApplication, QWidget, QStackedWidget
 from PySide6.QtGui import QFontDatabase, QFont, QIcon
 from PySide6.QtCore import Qt
@@ -12,6 +13,7 @@ from ui.graphs import Graphs
 from helpers.logger import get_logger
 import ctypes
 import os
+import sys
 
 # Resolve the project root properly — works regardless of how the app is launched
 # or whether the path happens to contain the substring "\ui" somewhere.
@@ -23,7 +25,8 @@ log = get_logger(__name__)
 class UI:
     def __init__(self):
         log.info("Starting PixeMLN")
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("pixemln.PixeMLN")
+        if sys.platform == "win32":
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("pixemln.PixeMLN")
         self.app = QApplication.instance() or QApplication([])
 
         icon_path = os.path.join(BASE_DIR, "assets", "pixemln-logo-no_text-ico.ico")
