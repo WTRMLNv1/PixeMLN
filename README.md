@@ -17,6 +17,7 @@ A local-first Pixela client — track anything, visualize everything, no API dra
 - **Conflict resolution** — trying to log a pixel on a date that already has one? You'll get a prompt to replace or combine, not a silent overwrite.
 - **Smooth animations** — hover scale, animated modals, spinner/tick feedback, arrow button effects. It's not just functional, it looks good too.
 - **Logging** — logs all critical features. Rotating logs, never larger than 1mb! If any issues, check `Data\pixemln.log`
+- **Cached themes** — caches the theme in memory, avoids reading the theme file many times during any task.
 
 ## Quick Start
 
